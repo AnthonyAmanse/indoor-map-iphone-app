@@ -30,6 +30,16 @@ class MapViewController: UIViewController, MKMapViewDelegate, CLLocationManagerD
     /// Outlet for the map view in the storyboard.
     @IBOutlet weak var mapView: MKMapView!
     
+    // Action for toggle - toggle the zones
+    @IBAction func switchToggled(_ sender: UISwitch) {
+        if sender.isOn {
+            getEventData()
+        } else {
+            self.mapView.removeOverlays(mapView.overlays)
+            self.mapView.add(floorplan0)
+        }
+    }
+    
     /// Outlet for the visuals switch at the lower-right of the storyboard.
     // @IBOutlet weak var debugVisualsSwitch: UISwitch!
     
@@ -174,14 +184,15 @@ class MapViewController: UIViewController, MKMapViewDelegate, CLLocationManagerD
         // let pdfUrl = Bundle.main.url(forResource: "Building_1959_Floor_08", withExtension: "pdf", subdirectory:"Floorplans")!
         
         // pdf for think-dev-area-crop.pdf
-         let pdfUrl = Bundle.main.url(forResource: "think-dev-area-crop", withExtension: "pdf", subdirectory:"Floorplans")!
+//         let pdfUrl = Bundle.main.url(forResource: "think-dev-area", withExtension: "pdf", subdirectory:"Floorplans")!
+        
+        // pdf for think-dev-area cloud
+        let pdfUrl = URL(string: "http://169.48.110.218/svg/think-dev-area.pdf")!
         
         
         floorplan0 = FloorplanOverlay(floorplanUrl: pdfUrl, withPDFBox: CGPDFBox.trimBox, andAnchors: anchorPair, forFloorLevel: 0)
         
-        visibleMapRegionDelegate = VisibleMapRegionDelegate(floorplanBounds: floorplan0.boundingMapRectIncludingRotations, boundingPDFBox: floorplan0.floorplanPDFBox,
-                                                            floorplanCenter: floorplan0.coordinate,
-                                                            floorplanUprightMKMapCameraHeading: floorplan0.getFloorplanUprightMKMapCameraHeading())
+        visibleMapRegionDelegate = VisibleMapRegionDelegate(floorplanBounds: floorplan0.boundingMapRectIncludingRotations, boundingPDFBox: floorplan0.floorplanPDFBox, floorplanCenter: floorplan0.coordinate, floorplanUprightMKMapCameraHeading: floorplan0.getFloorplanUprightMKMapCameraHeading())
         
         // === Initialize our view
         hideBackgroundOverlayAlpha = 1.0
@@ -193,11 +204,12 @@ class MapViewController: UIViewController, MKMapViewDelegate, CLLocationManagerD
 //         The following are provided for debugging.
 //         In production, you'll want to comment this out.
 //         */
-        debuggingOverlays = MapViewController.createDebuggingOverlaysForMapView(mapView!, aboutFloorplan: floorplan0)
-        debuggingAnnotations = MapViewController.createDebuggingAnnotationsForMapView(mapView!, aboutFloorplan: floorplan0)
+//        debuggingOverlays = MapViewController.createDebuggingOverlaysForMapView(mapView!, aboutFloorplan: floorplan0)
+//        debuggingAnnotations = MapViewController.createDebuggingAnnotationsForMapView(mapView!, aboutFloorplan: floorplan0)
 //
 //        // Draw the floorplan!
         mapView.add(floorplan0)
+        visibleMapRegionDelegate.mapViewResetCameraToFloorplan(mapView)
         
         // add the annotations - DEBUGGING
 //        mapView.addAnnotations(debuggingAnnotations)
@@ -228,6 +240,43 @@ class MapViewController: UIViewController, MKMapViewDelegate, CLLocationManagerD
          way in production.
          */
 //        mapView.mapType = MKMapTypeStandard
+    }
+    
+    // request map-api server
+    // this gets beacon data and adds it in map view
+    func getEventData() {
+        // _ = [CGPoint(x: 205.0, y: 335.3), CGPoint(x: 205.0, y: 367.3), CGPoint(x: 138.5, y: 367.3)]
+//        var arrayOfZones: [[CGPoint]]
+        let urlString = "http://169.48.110.218/events/think-dev-area"
+        guard let url = URL(string: urlString) else { return }
+        
+        URLSession.shared.dataTask(with: url) { (data, response, error) in
+            if error != nil {
+                print(error!.localizedDescription)
+            }
+            
+            guard let data = data else { return }
+            
+            do {
+                //Decode retrived data with JSONDecoder and assing type of Article object
+                let event = try JSONDecoder().decode(Event.self, from: data)
+                
+//                print(event)
+                
+                for beacon in event.beacons {
+                    print(beacon)
+                    let highlightZone = [CGPoint(x: beacon.x, y: event.y - beacon.y),CGPoint(x: beacon.x, y: event.y - beacon.y - beacon.width),CGPoint(x: beacon.x + beacon.width, y: event.y - beacon.y - beacon.width),CGPoint(x: beacon.x + beacon.width, y: event.y - beacon.y)]
+                    print(highlightZone)
+                    let customHighlightRegion = self.floorplan0.polygonFromCustomPDFPath(highlightZone)
+                    customHighlightRegion.title = "Hello World"
+                    customHighlightRegion.subtitle = "This custom region will be highlighted in Yellow!"
+                    self.mapView!.add(customHighlightRegion)
+                }
+                
+            } catch let jsonError {
+                print(jsonError)
+            }
+        }.resume()
     }
     
     /// Respond to CoreLocation updates
@@ -337,8 +386,8 @@ class MapViewController: UIViewController, MKMapViewDelegate, CLLocationManagerD
             if (polygon.title == "Hello World") {
                 let renderer = MKPolygonRenderer(polygon: polygon)
                 renderer.fillColor = UIColor.yellow.withAlphaComponent(0.5)
-                renderer.strokeColor = UIColor.yellow.withAlphaComponent(0.0)
-                renderer.lineWidth = 0.0
+                renderer.strokeColor = UIColor.lightGray.withAlphaComponent(0.5)
+                renderer.lineWidth = 1.0
                 return renderer
             }
             
